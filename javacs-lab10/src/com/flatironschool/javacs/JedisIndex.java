@@ -67,8 +67,10 @@ public class JedisIndex {
 	 * @return Set of URLs.
 	 */
 	public Set<String> getURLs(String term) {
-        // FILL THIS IN!
-		return null;
+		String key = urlSetKey(term); 
+		Set<String> urls = jedis.smembers(key);
+
+        return urls; 
 	}
 
     /**
@@ -78,8 +80,16 @@ public class JedisIndex {
 	 * @return Map from URL to count.
 	 */
 	public Map<String, Integer> getCounts(String term) {
-        // FILL THIS IN!
-		return null;
+		Map<String, Integer> map = new HashMap<String, Integer>();
+		Set<String> urls = getURLs(term);
+
+		for (String url: urls) {
+			Integer count = getCount(url, term);
+
+			map.put(url, count);
+		}
+
+		return map; 
 	}
 
     /**
@@ -90,8 +100,10 @@ public class JedisIndex {
 	 * @return
 	 */
 	public Integer getCount(String url, String term) {
-        // FILL THIS IN!
-		return null;
+        String key = termCounterKey(url); 
+        String count = jedis.hget(key, term);
+
+        return Integer.parseInt(count);
 	}
 
 
@@ -102,8 +114,44 @@ public class JedisIndex {
 	 * @param paragraphs  Collection of elements that should be indexed.
 	 */
 	public void indexPage(String url, Elements paragraphs) {
-        // FILL THIS IN!
+    	TermCounter tc = new TermCounter(url); 
+
+    	tc.processElements(paragraphs);
+    	pushTermCounterToRedis(tc); 
 	}
+
+
+	/**
+     * Adds a URL to the set associated with `term`.
+     */
+    public void add(String term, TermCounter tc) {
+    	String key = urlSetKey(term);
+    	String url = tc.getLabel(); 
+
+    	jedis.sadd(key, url);
+    }
+
+    /**
+     * Pushes the contents of the TermCounter to Redis.
+     */
+    public List<Object> pushTermCounterToRedis(TermCounter tc) {
+    	Transaction t = jedis.multi();
+    	String url = tc.getLabel(); 
+    	String hashKey = termCounterKey(url); 
+    	Set<String> keys = tc.keySet(); 
+
+    	for (String term: keys) {
+    		Integer count = tc.get(term); 
+    		String key = urlSetKey(term);
+
+    		t.hset(hashKey, term, Integer.toString(count));
+    		t.sadd(key, url);
+    	}
+
+    	List<Object> res = t.exec(); 
+
+    	return res;
+    }
 
 	/**
 	 * Prints the contents of the index.
